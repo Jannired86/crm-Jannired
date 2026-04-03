@@ -2,6 +2,9 @@ const STORAGE_KEY = "simple-crm-clients";
 
 const form = document.getElementById("client-form");
 const formTitle = document.getElementById("form-title");
+const exportButton = document.getElementById("export-button");
+const importButton = document.getElementById("import-button");
+const importFileInput = document.getElementById("import-file-input");
 const clientIdInput = document.getElementById("client-id");
 const cityInput = document.getElementById("city");
 const storeNameInput = document.getElementById("storeName");
@@ -59,6 +62,9 @@ const prospectsElement = document.getElementById("prospects");
 let clients = loadClients();
 
 form.addEventListener("submit", handleSubmit);
+exportButton.addEventListener("click", exportData);
+importButton.addEventListener("click", openImportPicker);
+importFileInput.addEventListener("change", importData);
 searchInput.addEventListener("input", renderClients);
 cityFilter.addEventListener("change", renderClients);
 clientTypeFilter.addEventListener("change", renderClients);
@@ -92,6 +98,84 @@ function loadClients() {
 
 function saveClients() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(clients));
+}
+
+function exportData() {
+  const backupData = {
+    exportedAt: new Date().toISOString(),
+    clients
+  };
+  const fileContent = JSON.stringify(backupData, null, 2);
+  const blob = new Blob([fileContent], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const downloadLink = document.createElement("a");
+
+  downloadLink.href = url;
+  downloadLink.download = `crm-backup-${getTodayString()}.json`;
+  downloadLink.click();
+
+  URL.revokeObjectURL(url);
+}
+
+function openImportPicker() {
+  importFileInput.value = "";
+  importFileInput.click();
+}
+
+function importData(event) {
+  const [file] = event.target.files || [];
+
+  if (!file) {
+    return;
+  }
+
+  const reader = new FileReader();
+
+  reader.onload = () => {
+    try {
+      const parsedData = JSON.parse(reader.result);
+      const importedClients = Array.isArray(parsedData) ? parsedData : parsedData.clients;
+
+      if (!Array.isArray(importedClients)) {
+        throw new Error("Invalid backup file.");
+      }
+
+      const confirmed = window.confirm(
+        "Importing data will replace your current clients. Do you want to continue?"
+      );
+
+      if (!confirmed) {
+        importFileInput.value = "";
+        return;
+      }
+
+      clients = importedClients.map((client) => {
+        return {
+          ...client,
+          createdDate: client.createdDate || getTodayString(),
+          lastTastingDate: client.lastTastingDate || client.tastingDate || "",
+          visitHistory: client.visitHistory || [],
+          tastingHistory: client.tastingHistory || [],
+          deliveryHistory: client.deliveryHistory || []
+        };
+      });
+
+      saveClients();
+      renderClients();
+      resetForm();
+      closeHistory();
+      closeDetails();
+      closeTasting();
+      closeDelivery();
+      window.alert("Data imported successfully.");
+    } catch (error) {
+      window.alert("Could not import that file. Please choose a valid CRM backup file.");
+    }
+
+    importFileInput.value = "";
+  };
+
+  reader.readAsText(file);
 }
 
 function handleSubmit(event) {

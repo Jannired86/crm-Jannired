@@ -72,6 +72,10 @@ body {
 
 .hero {
   padding: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
 }
 
 .eyebrow {
@@ -92,6 +96,12 @@ h2 {
   margin: 0;
   color: var(--muted);
   max-width: 700px;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .card {
@@ -318,6 +328,10 @@ th {
 
   .dashboard {
     grid-template-columns: 1fr;
+  }
+
+  .hero {
+    flex-direction: column;
   }
 
   .form {
