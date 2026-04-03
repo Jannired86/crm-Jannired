@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Simple CRM</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Simple Sales CRM</p>
+          <h1>Client Manager</h1>
+          <p class="subtitle">
+            Track clients, visits, tastings, and follow-ups in one clean and easy workspace.
+          </p>
+        </div>
+      </section>
+
+      <section class="dashboard">
+        <article class="stat-card">
+          <p class="stat-label">Overdue visits</p>
+          <p class="stat-value" id="overdue-visits">0</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-label">Tastings today</p>
+          <p class="stat-value" id="tastings-today">0</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-label">Overdue follow-ups</p>
+          <p class="stat-value" id="overdue-followups">0</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-label">Visits due today</p>
+          <p class="stat-value" id="visits-today">0</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-label">Active clients</p>
+          <p class="stat-value" id="active-clients">0</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-label">Prospects</p>
+          <p class="stat-value" id="prospects">0</p>
+        </article>
+      </section>
+
+      <section class="card">
+        <h2 id="form-title">Add client</h2>
+        <form id="client-form" class="form">
+          <input type="hidden" id="client-id" />
+
+          <label>
+            City
+            <input type="text" id="city" placeholder="Example: Dallas" required />
+          </label>
+
+          <label>
+            Store name
+            <input type="text" id="storeName" placeholder="Example: Tequila House" required />
+          </label>
+
+          <label>
+            Address
+            <input type="text" id="address" placeholder="Example: 123 Main St" />
+          </label>
+
+          <label>
+            Owner name
+            <input type="text" id="ownerName" placeholder="Example: Maria Lopez" />
+          </label>
+
+          <label>
+            Manager name
+            <input type="text" id="managerName" placeholder="Example: Carlos Diaz" />
+          </label>
+
+          <label>
+            Tasting status
+            <select id="tastingStatus">
+              <option value="">Select one</option>
+              <option value="Yes">Yes</option>
+              <option value="No">No</option>
+              <option value="Pending">Pending</option>
+            </select>
+          </label>
+
+          <label>
+            Tasting date
+            <input type="date" id="tastingDate" />
+          </label>
+
+          <label>
+            Purchase status
+            <select id="purchaseStatus">
+              <option value="">Select one</option>
+              <option value="Yes">Yes</option>
+              <option value="No">No</option>
+            </select>
+          </label>
+
+          <label>
+            Products purchased
+            <input type="text" id="productsPurchased" placeholder="Example: Blanco, Reposado" />
+          </label>
+
+          <label>
+            Priority
+            <select id="priority">
+              <option value="">Select one</option>
+              <option value="High">High</option>
+              <option value="Medium">Medium</option>
+              <option value="Low">Low</option>
+            </select>
+          </label>
+
+          <label>
+            Phone
+            <input type="tel" id="phone" placeholder="Example: 555-123-4567" required />
+          </label>
+
+          <label>
+            New note
+            <textarea id="notes" rows="3" placeholder="Write a new note. Older notes will stay saved."></textarea>
+          </label>
+
+          <label>
+            Next visit date
+            <input type="date" id="nextVisitDate" required />
+          </label>
+
+          <label>
+            Client type
+            <select id="clientType" required>
+              <option value="">Select one</option>
+              <option value="Bar">Bar</option>
+              <option value="Restaurant">Restaurant</option>
+              <option value="Liquor store">Liquor store</option>
+              <option value="Supermarket">Supermarket</option>
+              <option value="Other">Other</option>
+            </select>
+          </label>
+
+          <div class="actions">
+            <button type="submit" id="save-button">Save client</button>
+            <button type="button" id="cancel-button" class="secondary hidden">Cancel edit</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="section-header">
+          <h2>Sales follow-up</h2>
+          <select id="followup-city-filter">
+            <option value="">All active client cities</option>
+          </select>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>City</th>
+                <th>Store</th>
+                <th>Next visit</th>
+                <th>Tasting</th>
+                <th>Purchase</th>
+                <th>Products</th>
+                <th>Notes</th>
+                <th>Visits</th>
+              </tr>
+            </thead>
+            <tbody id="followup-table-body">
+              <tr>
+                <td colspan="8" class="empty-state">No active clients yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Visits Today</h2>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Store</th>
+                <th>City</th>
+                <th>Priority</th>
+                <th>Last visit</th>
+              </tr>
+            </thead>
+            <tbody id="today-visits-table-body">
+              <tr>
+                <td colspan="4" class="empty-state">No visits scheduled for today.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Not Visited In 14+ Days</h2>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Store</th>
+                <th>City</th>
+                <th>Last visit</th>
+                <th>Priority</th>
+              </tr>
+            </thead>
+            <tbody id="inactive-visits-table-body">
+              <tr>
+                <td colspan="4" class="empty-state">No clients waiting more than 14 days.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>No Order In 30+ Days</h2>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Store</th>
+                <th>City</th>
+                <th>Last order</th>
+                <th>Priority</th>
+              </tr>
+            </thead>
+            <tbody id="inactive-orders-table-body">
+              <tr>
+                <td colspan="4" class="empty-state">No clients waiting more than 30 days since last order.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Difficult Clients</h2>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Store</th>
+                <th>City</th>
+                <th>Priority</th>
+                <th>Visit count</th>
+                <th>Last visit</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody id="difficult-clients-table-body">
+              <tr>
+                <td colspan="6" class="empty-state">No difficult clients right now.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Top Clients</h2>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Store</th>
+                <th>City</th>
+                <th>Total sales</th>
+                <th>Total cases</th>
+                <th>Last delivery</th>
+              </tr>
+            </thead>
+            <tbody id="top-clients-table-body">
+              <tr>
+                <td colspan="5" class="empty-state">No sales data yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Route By City</h2>
+        <div id="route-by-city" class="route-groups">
+          <article class="empty-state">No clients available yet.</article>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-header">
+          <h2>Client list</h2>
+          <input type="text" id="search-input" placeholder="Search by city, store, or type" />
+        </div>
+
+        <div class="filters">
+          <select id="city-filter">
+            <option value="">All cities</option>
+          </select>
+          <select id="client-type-filter">
+            <option value="">All client types</option>
+            <option value="Active client">Active client</option>
+            <option value="Prospect">Prospect</option>
+          </select>
+          <label class="filter-check">
+            <input type="checkbox" id="purchase-no-filter" />
+            Purchase status = No
+          </label>
+          <label class="filter-check">
+            <input type="checkbox" id="priority-high-filter" />
+            Priority = High
+          </label>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>City</th>
+                <th>Store</th>
+                <th>Created date</th>
+                <th>Phone</th>
+                <th>Last tasting</th>
+                <th>Last delivery</th>
+                <th>Total deliveries</th>
+                <th>Total cases</th>
+                <th>Total sales</th>
+                <th>Visits</th>
+                <th>Last visit</th>
+                <th>Notes</th>
+                <th>Next visit</th>
+                <th>Type</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="client-table-body">
+              <tr>
+                <td colspan="15" class="empty-state">No clients yet. Add your first client above.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card hidden" id="history-card">
+        <div class="section-header">
+          <h2 id="history-title">Visit history</h2>
+          <button type="button" id="close-history-button" class="secondary">Close</button>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Visit date</th>
+                <th>Visit note</th>
+              </tr>
+            </thead>
+            <tbody id="history-table-body">
+              <tr>
+                <td colspan="2" class="empty-state">No visit history yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card hidden" id="details-card">
+        <div class="section-header">
+          <h2 id="details-title">Client details</h2>
+          <button type="button" id="close-details-button" class="secondary">Close</button>
+        </div>
+
+        <div class="details-grid" id="details-grid">
+          <article class="detail-item">
+            <p class="detail-label">Created date</p>
+            <p class="detail-value">-</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="card hidden" id="tasting-card">
+        <div class="section-header">
+          <h2 id="tasting-title">Tasting history</h2>
+          <button type="button" id="close-tasting-button" class="secondary">Close</button>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Tasting date</th>
+                <th>Result</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody id="tasting-table-body">
+              <tr>
+                <td colspan="3" class="empty-state">No tasting history yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card hidden" id="delivery-card">
+        <div class="section-header">
+          <h2 id="delivery-title">Delivery history</h2>
+          <button type="button" id="close-delivery-button" class="secondary">Close</button>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Delivery date</th>
+                <th>Product</th>
+                <th>Cases</th>
+                <th>Price/case</th>
+                <th>Free product</th>
+                <th>Free qty</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody id="delivery-table-body">
+              <tr>
+                <td colspan="7" class="empty-state">No delivery history yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>
