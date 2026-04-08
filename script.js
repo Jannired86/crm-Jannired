@@ -5,9 +5,7 @@ import {
   doc,
   getDocs,
   getFirestore,
-  onSnapshot,
   setDoc,
-  writeBatch
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -36,18 +34,13 @@ const clientIdInput = document.getElementById("client-id");
 const cityInput = document.getElementById("city");
 const storeNameInput = document.getElementById("storeName");
 const addressInput = document.getElementById("address");
+const storePhoneInput = document.getElementById("storePhone");
 const ownerNameInput = document.getElementById("ownerName");
+const ownerPhoneInput = document.getElementById("ownerPhone");
 const managerNameInput = document.getElementById("managerName");
-const tastingStatusInput = document.getElementById("tastingStatus");
-const tastingDateInput = document.getElementById("tastingDate");
-const purchaseStatusInput = document.getElementById("purchaseStatus");
-const productsPurchasedInput = document.getElementById("productsPurchased");
-const priorityInput = document.getElementById("priority");
-const phoneInput = document.getElementById("phone");
-const notesInput = document.getElementById("notes");
-const nextVisitDateInput = document.getElementById("nextVisitDate");
-const clientTypeInput = document.getElementById("clientType");
-const tableBody = document.getElementById("client-table-body");
+const managerPhoneInput = document.getElementById("managerPhone");
+const emailInput = document.getElementById("email");
+const clientCards = document.getElementById("client-cards");
 const followupTableBody = document.getElementById("followup-table-body");
 const todayVisitsTableBody = document.getElementById("today-visits-table-body");
 const inactiveVisitsTableBody = document.getElementById("inactive-visits-table-body");
@@ -67,10 +60,16 @@ const tastingCard = document.getElementById("tasting-card");
 const tastingTitle = document.getElementById("tasting-title");
 const tastingTableBody = document.getElementById("tasting-table-body");
 const closeTastingButton = document.getElementById("close-tasting-button");
-const deliveryCard = document.getElementById("delivery-card");
-const deliveryTitle = document.getElementById("delivery-title");
-const deliveryTableBody = document.getElementById("delivery-table-body");
-const closeDeliveryButton = document.getElementById("close-delivery-button");
+const orderFormCard = document.getElementById("order-form-card");
+const orderFormTitle = document.getElementById("order-form-title");
+const orderForm = document.getElementById("order-form");
+const orderClientIdInput = document.getElementById("order-client-id");
+const orderDateInput = document.getElementById("order-date");
+const orderLines = document.getElementById("order-lines");
+const addOrderLineButton = document.getElementById("add-order-line-button");
+const closeOrderFormButton = document.getElementById("close-order-form-button");
+const cancelOrderFormButton = document.getElementById("cancel-order-form-button");
+const orderTotalAmount = document.getElementById("order-total-amount");
 const searchInput = document.getElementById("search-input");
 const cityFilter = document.getElementById("city-filter");
 const clientTypeFilter = document.getElementById("client-type-filter");
@@ -85,14 +84,30 @@ const visitsTodayElement = document.getElementById("visits-today");
 const overdueFollowupsElement = document.getElementById("overdue-followups");
 const activeClientsElement = document.getElementById("active-clients");
 const prospectsElement = document.getElementById("prospects");
+const PRODUCT_OPTIONS = [
+  "750 ml Blanco",
+  "750 ml Reposado",
+  "750 ml Añejo",
+  "0.50 ml Blanco",
+  "0.50 ml Reposado",
+  "0.50 ml Añejo"
+];
+
+const ORDERS_ENABLED = true;
 
 let clients = [];
 let isFirestoreReady = false;
 
 form.addEventListener("submit", handleSubmit);
+if (orderForm) {
+  orderForm.addEventListener("submit", handleOrderSubmit);
+}
 exportButton.addEventListener("click", exportData);
 importButton.addEventListener("click", openImportPicker);
 importFileInput.addEventListener("change", importData);
+if (addOrderLineButton) {
+  addOrderLineButton.addEventListener("click", () => addOrderLine());
+}
 searchInput.addEventListener("input", renderClients);
 cityFilter.addEventListener("change", renderClients);
 clientTypeFilter.addEventListener("change", renderClients);
@@ -103,18 +118,31 @@ cancelButton.addEventListener("click", resetForm);
 closeHistoryButton.addEventListener("click", closeHistory);
 closeDetailsButton.addEventListener("click", closeDetails);
 closeTastingButton.addEventListener("click", closeTasting);
-closeDeliveryButton.addEventListener("click", closeDelivery);
+if (closeOrderFormButton) {
+  closeOrderFormButton.addEventListener("click", closeOrderForm);
+}
+if (cancelOrderFormButton) {
+  cancelOrderFormButton.addEventListener("click", closeOrderForm);
+}
+if (orderLines) {
+  orderLines.addEventListener("click", handleOrderLineClick);
+  orderLines.addEventListener("input", renderOrderTotal);
+  orderLines.addEventListener("change", renderOrderTotal);
+}
 
+console.log("app started");
 renderClients();
 initializeFirebase();
 
-function initializeFirebase() {
+async function initializeFirebase() {
   try {
     app = initializeApp(firebaseConfig);
     console.log("firebase initialized");
     db = getFirestore(app);
     clientsCollection = collection(db, CLIENTS_COLLECTION);
-    subscribeToClients();
+    isFirestoreReady = true;
+    console.log("firestore connected", { collection: CLIENTS_COLLECTION });
+    await loadClientsFromFirestore();
   } catch (error) {
     console.error("Firebase initialization error:", error);
     setSyncStatus("Firebase could not start.");
@@ -122,7 +150,7 @@ function initializeFirebase() {
   }
 }
 
-function subscribeToClients() {
+async function loadClientsFromFirestore() {
   if (!clientsCollection) {
     console.error("Firestore collection is not ready.");
     setSyncStatus("Firestore is not ready.");
@@ -130,26 +158,24 @@ function subscribeToClients() {
   }
 
   setSyncStatus("Loading clients from Firestore...");
+  console.log("loading clients", { collection: CLIENTS_COLLECTION });
 
-  onSnapshot(
-    clientsCollection,
-    (snapshot) => {
-      isFirestoreReady = true;
-      clients = snapshot.docs
-        .map((item) => normalizeClient({ id: item.id, ...item.data() }))
-        .sort((a, b) => a.storeName.localeCompare(b.storeName));
+  try {
+    const snapshot = await getDocs(clientsCollection);
+    clients = snapshot.docs
+      .map((item) => normalizeClient({ id: item.id, ...item.data() }))
+      .sort((a, b) => a.storeName.localeCompare(b.storeName));
 
-      setSyncStatus(`Firestore connected. ${clients.length} client${clients.length === 1 ? "" : "s"} loaded.`);
-      renderClients();
-    },
-    (error) => {
-      isFirestoreReady = false;
-      console.error("Firestore connection error:", error);
-      console.error(error);
-      setSyncStatus("Could not load Firestore data.");
-      window.alert("Could not connect to Firestore. Check your Firebase project settings and rules.");
-    }
-  );
+    console.log("clients loaded count", snapshot.size);
+    setSyncStatus(`Firestore connected. ${clients.length} client${clients.length === 1 ? "" : "s"} loaded.`);
+    renderClients();
+  } catch (error) {
+    isFirestoreReady = false;
+    console.error("loading clients error", error);
+    console.error(error);
+    setSyncStatus("Could not load Firestore data.");
+    window.alert("Could not connect to Firestore. Check your Firebase project settings and rules.");
+  }
 }
 
 function ensureFirestoreReady() {
@@ -170,12 +196,20 @@ function ensureFirestoreReady() {
 
 async function saveClientToFirestore(client) {
   if (!ensureFirestoreReady()) {
-    return;
+    throw new Error("Firestore is not ready.");
   }
 
   try {
-    const clientDoc = doc(db, CLIENTS_COLLECTION, client.id);
-    await setDoc(clientDoc, client);
+    let clientId = client.id;
+
+    if (!clientId) {
+      clientId = doc(clientsCollection).id;
+      client.id = clientId;
+    }
+
+    const clientDoc = doc(db, CLIENTS_COLLECTION, clientId);
+    await setDoc(clientDoc, client, { merge: true });
+    return client;
   } catch (error) {
     console.error("Firestore save error:", error);
     throw error;
@@ -205,71 +239,9 @@ function openImportPicker() {
 }
 
 async function importData(event) {
-  if (!ensureFirestoreReady()) {
-    importFileInput.value = "";
-    return;
-  }
-
-  const [file] = event.target.files || [];
-
-  if (!file) {
-    return;
-  }
-
-  const reader = new FileReader();
-
-  reader.onload = async () => {
-    try {
-      const parsedData = JSON.parse(reader.result);
-      const importedClients = Array.isArray(parsedData) ? parsedData : parsedData.clients;
-
-      if (!Array.isArray(importedClients)) {
-        throw new Error("Invalid backup file.");
-      }
-
-      const confirmed = window.confirm(
-        "Importing data will replace your current Firestore clients. Do you want to continue?"
-      );
-
-      if (!confirmed) {
-        importFileInput.value = "";
-        return;
-      }
-
-      setSyncStatus("Importing data to Firestore...");
-
-      const existingDocs = await getDocs(clientsCollection);
-      const batch = writeBatch(db);
-
-      existingDocs.forEach((item) => {
-        batch.delete(item.ref);
-      });
-
-      importedClients.map(normalizeClient).forEach((client) => {
-        const clientDoc = doc(db, CLIENTS_COLLECTION, client.id);
-        batch.set(clientDoc, client);
-      });
-
-      await batch.commit();
-
-      resetForm();
-      closeHistory();
-      closeDetails();
-      closeTasting();
-      closeDelivery();
-      setSyncStatus("Import complete. Firestore data updated.");
-      window.alert("Data imported successfully.");
-    } catch (error) {
-      console.error("Firestore import error:", error);
-      console.error(error);
-      setSyncStatus("Import failed.");
-      window.alert("Could not import that file. Please choose a valid CRM backup file.");
-    }
-
-    importFileInput.value = "";
-  };
-
-  reader.readAsText(file);
+  importFileInput.value = "";
+  setSyncStatus("Import is temporarily disabled.");
+  window.alert("Import is temporarily disabled to protect existing Firestore client documents.");
 }
 
 function normalizeClient(client) {
@@ -278,17 +250,20 @@ function normalizeClient(client) {
     city: client.city || "",
     storeName: client.storeName || "",
     address: client.address || "",
+    storePhone: client.storePhone || client.phone || "",
     ownerName: client.ownerName || "",
+    ownerPhone: client.ownerPhone || "",
     managerName: client.managerName || "",
+    managerPhone: client.managerPhone || "",
+    email: client.email || "",
     tastingStatus: client.tastingStatus || "",
     tastingDate: client.tastingDate || "",
     purchaseStatus: client.purchaseStatus || "",
     productsPurchased: client.productsPurchased || "",
     priority: client.priority || "",
-    phone: client.phone || "",
     notes: client.notes || "",
     nextVisitDate: client.nextVisitDate || "",
-    clientType: client.clientType || "",
+    clientType: client.clientType || "Other",
     visitCount: client.visitCount || 1,
     lastVisitDate: client.lastVisitDate || "",
     lastOrderDate: client.lastOrderDate || "",
@@ -296,7 +271,7 @@ function normalizeClient(client) {
     lastTastingDate: client.lastTastingDate || client.tastingDate || "",
     visitHistory: client.visitHistory || [],
     tastingHistory: client.tastingHistory || [],
-    deliveryHistory: client.deliveryHistory || []
+    orderHistory: client.orderHistory || client.deliveryHistory || []
   };
 }
 
@@ -306,39 +281,52 @@ async function handleSubmit(event) {
   const existingClient = clients.find((item) => item.id === clientIdInput.value);
 
   const client = normalizeClient({
-    id: clientIdInput.value || crypto.randomUUID(),
+    id: clientIdInput.value || "",
     city: cityInput.value.trim(),
     storeName: storeNameInput.value.trim(),
     address: addressInput.value.trim(),
+    storePhone: storePhoneInput.value.trim(),
     ownerName: ownerNameInput.value.trim(),
+    ownerPhone: ownerPhoneInput.value.trim(),
     managerName: managerNameInput.value.trim(),
-    tastingStatus: tastingStatusInput.value,
-    tastingDate: tastingDateInput.value,
-    purchaseStatus: purchaseStatusInput.value,
-    productsPurchased: productsPurchasedInput.value.trim(),
-    priority: priorityInput.value,
-    phone: phoneInput.value.trim(),
-    notes: notesInput.value.trim(),
-    nextVisitDate: nextVisitDateInput.value,
-    clientType: clientTypeInput.value,
+    managerPhone: managerPhoneInput.value.trim(),
+    email: emailInput.value.trim(),
+    tastingStatus: existingClient ? existingClient.tastingStatus || "" : "",
+    tastingDate: existingClient ? existingClient.tastingDate || "" : "",
+    purchaseStatus: existingClient ? existingClient.purchaseStatus || "" : "",
+    productsPurchased: existingClient ? existingClient.productsPurchased || "" : "",
+    priority: existingClient ? existingClient.priority || "" : "",
+    notes: existingClient ? existingClient.notes || "" : "",
+    nextVisitDate: existingClient ? existingClient.nextVisitDate || "" : "",
+    clientType: existingClient ? existingClient.clientType || "Other" : "Other",
     visitCount: existingClient ? existingClient.visitCount || 1 : 1,
     lastVisitDate: existingClient ? existingClient.lastVisitDate || "" : "",
     lastOrderDate: existingClient ? existingClient.lastOrderDate || "" : "",
     createdDate: existingClient ? existingClient.createdDate || getTodayString() : getTodayString(),
     lastTastingDate: existingClient
-      ? existingClient.lastTastingDate || existingClient.tastingDate || tastingDateInput.value
-      : tastingDateInput.value,
+      ? existingClient.lastTastingDate || existingClient.tastingDate || ""
+      : "",
     visitHistory: existingClient ? existingClient.visitHistory || [] : [],
     tastingHistory: existingClient ? existingClient.tastingHistory || [] : [],
-    deliveryHistory: existingClient ? existingClient.deliveryHistory || [] : []
+    orderHistory: existingClient ? existingClient.orderHistory || [] : []
   });
 
   try {
-    setSyncStatus("Saving client to Firestore...");
-    await saveClientToFirestore(client);
+    console.log("saving client", {
+      id: client.id || "(new)",
+      storeName: client.storeName
+    });
+    setSyncStatus(existingClient ? "Updating client in Firestore..." : "Saving client to Firestore...");
+    const savedClient = await saveClientToFirestore(client);
+    console.log("client saved", {
+      id: savedClient.id,
+      storeName: savedClient.storeName
+    });
+    await loadClientsFromFirestore();
     resetForm();
-    setSyncStatus("Client saved to Firestore.");
+    setSyncStatus(existingClient ? "Client updated in Firestore." : "Client saved to Firestore.");
   } catch (error) {
+    console.error("save error", error);
     console.error(error);
     setSyncStatus("Could not save client.");
     window.alert("Could not save this client to Firestore.");
@@ -382,53 +370,58 @@ function renderClients() {
         ? "No clients yet. Add your first client above."
         : "No matching clients found.";
 
-    tableBody.innerHTML = `
-      <tr>
-        <td colspan="15" class="empty-state">${emptyMessage}</td>
-      </tr>
-    `;
+    clientCards.innerHTML = `<article class="empty-state">${emptyMessage}</article>`;
     return;
   }
 
-  tableBody.innerHTML = filteredClients
+  clientCards.innerHTML = filteredClients
     .map((client) => {
-      const deliverySummary = getDeliverySummary(client.deliveryHistory);
+      const orderSummary = getOrderSummary(client.orderHistory);
 
       return `
-        <tr>
-          <td>${escapeHtml(client.city)}</td>
-          <td>${escapeHtml(client.storeName)}</td>
-          <td>${formatDate(client.createdDate)}</td>
-          <td>${escapeHtml(client.phone)}</td>
-          <td>${formatDate(client.lastTastingDate)}</td>
-          <td>${formatDate(deliverySummary.lastDeliveryDate)}</td>
-          <td>${deliverySummary.totalDeliveries}</td>
-          <td>${deliverySummary.totalCases}</td>
-          <td>${formatCurrency(deliverySummary.totalSalesAmount)}</td>
-          <td>${client.visitCount || 0}</td>
-          <td>${formatDate(client.lastVisitDate)}</td>
-          <td>${escapeHtml(client.notes || "-")}</td>
-          <td>${formatDate(client.nextVisitDate)}</td>
-          <td>${escapeHtml(client.clientType)}</td>
-          <td>
-            <div class="table-actions">
-              <button type="button" data-action="details" data-id="${client.id}">View Details</button>
-              <button type="button" data-action="tasting" data-id="${client.id}">Add Tasting</button>
-              <button type="button" data-action="visit" data-id="${client.id}">Add Visit</button>
-              <button type="button" data-action="delivery" data-id="${client.id}">Add Delivery</button>
-              <button type="button" data-action="tastings" data-id="${client.id}">View Tastings</button>
-              <button type="button" data-action="history" data-id="${client.id}">View History</button>
-              <button type="button" data-action="deliveries" data-id="${client.id}">View Deliveries</button>
-              <button type="button" data-action="edit" data-id="${client.id}">Edit</button>
-              <button type="button" class="delete-button" data-action="delete" data-id="${client.id}">Delete</button>
+        <article class="client-entry-card">
+          <div class="client-entry-header">
+            <div>
+              <h3>${escapeHtml(client.storeName)}</h3>
+              <p>${escapeHtml(client.city)}</p>
             </div>
-          </td>
-        </tr>
+            <div class="client-entry-tags">
+              <span class="client-tag">${escapeHtml(client.clientType || "Other")}</span>
+              <span class="client-tag priority-${(client.priority || "none").toLowerCase()}">${escapeHtml(client.priority || "No priority")}</span>
+            </div>
+          </div>
+          <div class="client-entry-grid">
+            <div><span>Created</span><strong>${formatDate(client.createdDate)}</strong></div>
+            <div><span>Store phone</span><strong>${escapeHtml(client.storePhone || "-")}</strong></div>
+            <div><span>Owner</span><strong>${escapeHtml(client.ownerName || "-")}</strong></div>
+            <div><span>Owner phone</span><strong>${escapeHtml(client.ownerPhone || "-")}</strong></div>
+            <div><span>Manager</span><strong>${escapeHtml(client.managerName || "-")}</strong></div>
+            <div><span>Manager phone</span><strong>${escapeHtml(client.managerPhone || "-")}</strong></div>
+            <div><span>Email</span><strong>${escapeHtml(client.email || "-")}</strong></div>
+            <div><span>Next visit</span><strong>${formatDate(client.nextVisitDate)}</strong></div>
+            <div><span>Last tasting</span><strong>${formatDate(client.lastTastingDate)}</strong></div>
+            <div><span>Last order</span><strong>${formatDate(orderSummary.lastOrderDate)}</strong></div>
+            <div><span>Total sales</span><strong>${formatCurrency(orderSummary.totalSalesAmount)}</strong></div>
+            <div><span>Visits</span><strong>${client.visitCount || 0}</strong></div>
+          </div>
+          <p class="client-entry-notes">${escapeHtml(client.notes || "No notes yet.")}</p>
+          <div class="table-actions">
+            <button type="button" data-action="set-type" data-id="${client.id}">Set Client Type</button>
+            <button type="button" data-action="set-priority" data-id="${client.id}">Set Priority</button>
+            <button type="button" data-action="tasting" data-id="${client.id}">Add Tasting</button>
+            <button type="button" data-action="visit" data-id="${client.id}">Add Visit</button>
+            <button type="button" data-action="details" data-id="${client.id}">View Details</button>
+            <button type="button" data-action="tastings" data-id="${client.id}">View Tastings</button>
+            <button type="button" data-action="history" data-id="${client.id}">View History</button>
+            <button type="button" data-action="edit" data-id="${client.id}">Edit</button>
+            <button type="button" class="delete-button" data-action="delete" data-id="${client.id}">Delete</button>
+          </div>
+        </article>
       `;
     })
     .join("");
 
-  tableBody.querySelectorAll("button").forEach((button) => {
+  clientCards.querySelectorAll("button").forEach((button) => {
     button.addEventListener("click", () => {
       const { action, id } = button.dataset;
 
@@ -440,6 +433,14 @@ function renderClients() {
         showDetails(id);
       }
 
+      if (action === "set-type") {
+        setClientType(id);
+      }
+
+      if (action === "set-priority") {
+        setPriority(id);
+      }
+
       if (action === "visit") {
         addVisit(id);
       }
@@ -448,20 +449,12 @@ function renderClients() {
         addTasting(id);
       }
 
-      if (action === "delivery") {
-        addDelivery(id);
-      }
-
       if (action === "tastings") {
         showTastings(id);
       }
 
       if (action === "history") {
         showHistory(id);
-      }
-
-      if (action === "deliveries") {
-        showDeliveries(id);
       }
 
       if (action === "delete") {
@@ -597,7 +590,7 @@ function renderTopClients() {
     .map((client) => {
       return {
         client,
-        summary: getDeliverySummary(client.deliveryHistory)
+        summary: getOrderSummary(client.orderHistory)
       };
     })
     .filter((item) => item.summary.totalSalesAmount > 0)
@@ -620,7 +613,7 @@ function renderTopClients() {
           <td>${escapeHtml(client.city)}</td>
           <td>${formatCurrency(summary.totalSalesAmount)}</td>
           <td>${summary.totalCases}</td>
-          <td>${formatDate(summary.lastDeliveryDate)}</td>
+          <td>${formatDate(summary.lastOrderDate)}</td>
         </tr>
       `;
     })
@@ -790,25 +783,20 @@ function editClient(id) {
   }
 
   clientIdInput.value = client.id;
-  cityInput.value = client.city;
   storeNameInput.value = client.storeName;
   addressInput.value = client.address || "";
+  cityInput.value = client.city;
+  storePhoneInput.value = client.storePhone || "";
   ownerNameInput.value = client.ownerName || "";
+  ownerPhoneInput.value = client.ownerPhone || "";
   managerNameInput.value = client.managerName || "";
-  tastingStatusInput.value = client.tastingStatus || "";
-  tastingDateInput.value = client.tastingDate || "";
-  purchaseStatusInput.value = client.purchaseStatus || "";
-  productsPurchasedInput.value = client.productsPurchased || "";
-  priorityInput.value = client.priority || "";
-  phoneInput.value = client.phone;
-  notesInput.value = "";
-  nextVisitDateInput.value = client.nextVisitDate;
-  clientTypeInput.value = client.clientType;
+  managerPhoneInput.value = client.managerPhone || "";
+  emailInput.value = client.email || "";
 
   formTitle.textContent = "Edit client";
   saveButton.textContent = "Update client";
   cancelButton.classList.remove("hidden");
-  cityInput.focus();
+  storeNameInput.focus();
 }
 
 async function addVisit(id) {
@@ -839,10 +827,28 @@ async function addVisit(id) {
   }
 
   const visitNote = enteredNote.trim();
+  const suggestedNextVisit = clients[clientIndex].nextVisitDate || "";
+  const enteredNextVisit = window.prompt(
+    "Enter next visit date (optional YYYY-MM-DD):",
+    suggestedNextVisit
+  );
+
+  if (enteredNextVisit === null) {
+    return;
+  }
+
+  const nextVisitDate = enteredNextVisit.trim();
+
+  if (nextVisitDate && !isValidDateInput(nextVisitDate)) {
+    window.alert("Please enter a valid next visit date in YYYY-MM-DD format.");
+    return;
+  }
 
   const currentCount = clients[clientIndex].visitCount || 0;
   clients[clientIndex].visitCount = currentCount + 1;
   clients[clientIndex].lastVisitDate = selectedVisitDate;
+  clients[clientIndex].nextVisitDate = nextVisitDate;
+  clients[clientIndex].notes = visitNote || clients[clientIndex].notes || "";
   clients[clientIndex].visitHistory = clients[clientIndex].visitHistory || [];
   clients[clientIndex].visitHistory.unshift({
     date: selectedVisitDate,
@@ -860,74 +866,165 @@ async function addVisit(id) {
   }
 }
 
-async function addDelivery(id) {
-  const clientIndex = clients.findIndex((item) => item.id === id);
+function openOrderForm(id) {
+  if (!ORDERS_ENABLED) {
+    window.alert("Add Delivery is temporarily disabled.");
+    return;
+  }
+
+  const client = clients.find((item) => item.id === id);
+
+  if (!client) {
+    return;
+  }
+
+  orderFormTitle.textContent = `Add delivery - ${client.storeName}`;
+  orderClientIdInput.value = client.id;
+  orderDateInput.value = getTodayString();
+  orderLines.innerHTML = "";
+  addOrderLine();
+  renderOrderTotal();
+  orderFormCard.classList.remove("hidden");
+  orderDateInput.focus();
+}
+
+function closeOrderForm() {
+  orderForm.reset();
+  orderClientIdInput.value = "";
+  orderLines.innerHTML = "";
+  renderOrderTotal();
+  orderFormCard.classList.add("hidden");
+}
+
+function handleOrderLineClick(event) {
+  const removeButton = event.target.closest("[data-remove-line]");
+
+  if (!removeButton) {
+    return;
+  }
+
+  const lineCard = removeButton.closest(".delivery-line-card");
+
+  if (!lineCard) {
+    return;
+  }
+
+  lineCard.remove();
+
+  if (orderLines.children.length === 0) {
+    addOrderLine();
+  }
+
+  renderOrderTotal();
+}
+
+function addOrderLine(line = {}) {
+  const lineCard = document.createElement("article");
+  lineCard.className = "delivery-line-card";
+  lineCard.innerHTML = `
+    <label>
+      Product
+      <select class="delivery-line-product" required>
+        <option value="">Select product</option>
+        ${PRODUCT_OPTIONS.map((option) => {
+          const selected = option === line.productName ? "selected" : "";
+          return `<option value="${escapeHtml(option)}" ${selected}>${escapeHtml(option)}</option>`;
+        }).join("")}
+      </select>
+    </label>
+    <label>
+      Quantity
+      <input type="number" class="delivery-line-quantity" min="0" step="1" value="${escapeHtml(line.quantity || 0)}" required />
+    </label>
+    <label>
+      Price
+      <input type="number" class="delivery-line-price" min="0" step="0.01" value="${escapeHtml(line.price || 0)}" required />
+    </label>
+    <label class="free-check">
+      <input type="checkbox" class="delivery-line-free" ${line.isFree ? "checked" : ""} />
+      Free product
+    </label>
+    <button type="button" class="secondary line-remove-button" data-remove-line>Remove</button>
+  `;
+
+  orderLines.appendChild(lineCard);
+}
+
+function getOrderLineItemsFromForm() {
+  return Array.from(orderLines.querySelectorAll(".delivery-line-card"))
+    .map((lineCard) => {
+      const productName = lineCard.querySelector(".delivery-line-product").value;
+      const quantity = Number(lineCard.querySelector(".delivery-line-quantity").value) || 0;
+      const price = Number(lineCard.querySelector(".delivery-line-price").value) || 0;
+      const isFree = lineCard.querySelector(".delivery-line-free").checked;
+
+      return {
+        productName,
+        quantity,
+        price,
+        isFree,
+        lineTotal: isFree ? 0 : quantity * price
+      };
+    })
+    .filter((line) => line.productName && line.quantity > 0);
+}
+
+function renderOrderTotal() {
+  const totalAmount = getOrderLineItemsFromForm().reduce((sum, line) => {
+    return sum + line.lineTotal;
+  }, 0);
+
+  orderTotalAmount.textContent = formatCurrency(totalAmount);
+}
+
+async function handleOrderSubmit(event) {
+  if (!ORDERS_ENABLED) {
+    event.preventDefault();
+    window.alert("Add Delivery is temporarily disabled.");
+    return;
+  }
+
+  event.preventDefault();
+
+  const clientId = orderClientIdInput.value;
+  const clientIndex = clients.findIndex((item) => item.id === clientId);
 
   if (clientIndex === -1) {
     return;
   }
 
-  const defaultDate = getTodayString();
-  const deliveryDate = promptForValue("Enter delivery date (YYYY-MM-DD):", defaultDate);
+  const orderDate = orderDateInput.value;
 
-  if (deliveryDate === null) {
+  if (!isValidDateInput(orderDate)) {
+    window.alert("Please enter a valid delivery date.");
     return;
   }
 
-  if (!isValidDateInput(deliveryDate)) {
-    window.alert("Please enter a valid date in YYYY-MM-DD format.");
+  const lineItems = getOrderLineItemsFromForm();
+
+  if (lineItems.length === 0) {
+    window.alert("Please add at least one product line.");
     return;
   }
 
-  const productName = promptForValue("Enter product name:", "");
-  if (productName === null) {
-    return;
-  }
+  const totalAmount = lineItems.reduce((sum, line) => sum + line.lineTotal, 0);
 
-  const quantityCases = promptForValue("Enter quantity of cases:", "0");
-  if (quantityCases === null) {
-    return;
-  }
-
-  const pricePerCase = promptForValue("Enter price per case:", "0");
-  if (pricePerCase === null) {
-    return;
-  }
-
-  const freeProduct = promptForValue("Free product? (Yes/No):", "No");
-  if (freeProduct === null) {
-    return;
-  }
-
-  const freeQuantity = promptForValue("Enter free quantity:", "0");
-  if (freeQuantity === null) {
-    return;
-  }
-
-  const deliveryNotes = promptForValue("Enter delivery notes:", "");
-  if (deliveryNotes === null) {
-    return;
-  }
-
-  clients[clientIndex].deliveryHistory = clients[clientIndex].deliveryHistory || [];
-  clients[clientIndex].deliveryHistory.unshift({
-    date: deliveryDate,
-    productName,
-    quantityCases,
-    pricePerCase,
-    freeProduct,
-    freeQuantity,
-    notes: deliveryNotes
+  clients[clientIndex].orderHistory = clients[clientIndex].orderHistory || [];
+  clients[clientIndex].orderHistory.unshift({
+    id: crypto.randomUUID(),
+    date: orderDate,
+    lineItems,
+    totalAmount
   });
-  clients[clientIndex].lastOrderDate = deliveryDate;
+  clients[clientIndex].lastOrderDate = orderDate;
   clients[clientIndex].purchaseStatus = "Yes";
-  clients[clientIndex].productsPurchased = productName || clients[clientIndex].productsPurchased || "";
+  clients[clientIndex].productsPurchased = lineItems.map((line) => line.productName).join(", ");
 
   try {
     setSyncStatus("Saving delivery to Firestore...");
     await saveClientToFirestore(clients[clientIndex]);
     setSyncStatus("Delivery saved to Firestore.");
-    showDeliveries(id);
+    closeOrderForm();
   } catch (error) {
     console.error(error);
     setSyncStatus("Could not save delivery.");
@@ -945,9 +1042,11 @@ async function deleteClient(id) {
   try {
     setSyncStatus("Deleting client from Firestore...");
     await deleteDoc(doc(db, CLIENTS_COLLECTION, id));
+    console.log("client deleted", { id });
     resetForm();
     setSyncStatus("Client deleted from Firestore.");
   } catch (error) {
+    console.error("deleting client error", error);
     console.error(error);
     setSyncStatus("Could not delete client.");
     window.alert("Could not delete this client from Firestore.");
@@ -1035,7 +1134,7 @@ function showDetails(id) {
     return;
   }
 
-  const deliverySummary = getDeliverySummary(client.deliveryHistory);
+  const orderSummary = getOrderSummary(client.orderHistory);
 
   detailsTitle.textContent = `Client details - ${client.storeName}`;
   detailsGrid.innerHTML = `
@@ -1052,12 +1151,28 @@ function showDetails(id) {
       <p class="detail-value">${formatDate(client.createdDate)}</p>
     </article>
     <article class="detail-item">
-      <p class="detail-label">Phone</p>
-      <p class="detail-value">${escapeHtml(client.phone || "-")}</p>
+      <p class="detail-label">Store phone</p>
+      <p class="detail-value">${escapeHtml(client.storePhone || "-")}</p>
+    </article>
+    <article class="detail-item">
+      <p class="detail-label">Owner phone</p>
+      <p class="detail-value">${escapeHtml(client.ownerPhone || "-")}</p>
+    </article>
+    <article class="detail-item">
+      <p class="detail-label">Manager phone</p>
+      <p class="detail-value">${escapeHtml(client.managerPhone || "-")}</p>
+    </article>
+    <article class="detail-item">
+      <p class="detail-label">Email</p>
+      <p class="detail-value">${escapeHtml(client.email || "-")}</p>
     </article>
     <article class="detail-item">
       <p class="detail-label">Last tasting</p>
       <p class="detail-value">${formatDate(client.lastTastingDate)}</p>
+    </article>
+    <article class="detail-item">
+      <p class="detail-label">Client type</p>
+      <p class="detail-value">${escapeHtml(client.clientType || "-")}</p>
     </article>
     <article class="detail-item">
       <p class="detail-label">Priority</p>
@@ -1073,7 +1188,7 @@ function showDetails(id) {
     </article>
     <article class="detail-item">
       <p class="detail-label">Total sales</p>
-      <p class="detail-value">${formatCurrency(deliverySummary.totalSalesAmount)}</p>
+      <p class="detail-value">${formatCurrency(orderSummary.totalSalesAmount)}</p>
     </article>
   `;
 
@@ -1082,6 +1197,68 @@ function showDetails(id) {
 
 function closeDetails() {
   detailsCard.classList.add("hidden");
+}
+
+async function setClientType(id) {
+  const clientIndex = clients.findIndex((item) => item.id === id);
+
+  if (clientIndex === -1) {
+    return;
+  }
+
+  const currentType = clients[clientIndex].clientType || "Other";
+  const enteredType = window.prompt(
+    "Enter client type: Bar, Restaurant, Liquor store, Supermarket, or Other",
+    currentType
+  );
+
+  if (enteredType === null) {
+    return;
+  }
+
+  const nextType = enteredType.trim() || currentType;
+  clients[clientIndex].clientType = nextType;
+
+  try {
+    setSyncStatus("Saving client type to Firestore...");
+    await saveClientToFirestore(clients[clientIndex]);
+    setSyncStatus("Client type saved.");
+  } catch (error) {
+    console.error(error);
+    setSyncStatus("Could not save client type.");
+    window.alert("Could not save client type.");
+  }
+}
+
+async function setPriority(id) {
+  const clientIndex = clients.findIndex((item) => item.id === id);
+
+  if (clientIndex === -1) {
+    return;
+  }
+
+  const currentPriority = clients[clientIndex].priority || "Medium";
+  const enteredPriority = window.prompt(
+    "Enter priority: High, Medium, or Low",
+    currentPriority
+  );
+
+  if (enteredPriority === null) {
+    return;
+  }
+
+  const nextPriority = enteredPriority.trim() || currentPriority;
+  clients[clientIndex].priority = nextPriority;
+
+  try {
+    setSyncStatus("Saving priority to Firestore...");
+    await saveClientToFirestore(clients[clientIndex]);
+    setSyncStatus("Priority saved.");
+  } catch (error) {
+    console.error(error);
+    setSyncStatus("Could not save priority.");
+    window.alert("Could not save priority.");
+  }
 }
 
 async function addTasting(id) {
@@ -1171,46 +1348,6 @@ function closeTasting() {
   tastingCard.classList.add("hidden");
 }
 
-function showDeliveries(id) {
-  const client = clients.find((item) => item.id === id);
-
-  if (!client) {
-    return;
-  }
-
-  deliveryTitle.textContent = `Delivery history - ${client.storeName}`;
-
-  if (!client.deliveryHistory || client.deliveryHistory.length === 0) {
-    deliveryTableBody.innerHTML = `
-      <tr>
-        <td colspan="7" class="empty-state">No delivery history yet.</td>
-      </tr>
-    `;
-  } else {
-    deliveryTableBody.innerHTML = client.deliveryHistory
-      .map((delivery) => {
-        return `
-          <tr>
-            <td>${escapeHtml(formatDate(delivery.date))}</td>
-            <td>${escapeHtml(delivery.productName || "-")}</td>
-            <td>${escapeHtml(delivery.quantityCases || "-")}</td>
-            <td>${escapeHtml(delivery.pricePerCase || "-")}</td>
-            <td>${escapeHtml(delivery.freeProduct || "-")}</td>
-            <td>${escapeHtml(delivery.freeQuantity || "-")}</td>
-            <td>${escapeHtml(delivery.notes || "-")}</td>
-          </tr>
-        `;
-      })
-      .join("");
-  }
-
-  deliveryCard.classList.remove("hidden");
-}
-
-function closeDelivery() {
-  deliveryCard.classList.add("hidden");
-}
-
 function promptForValue(message, defaultValue) {
   const enteredValue = window.prompt(message, defaultValue);
 
@@ -1221,35 +1358,118 @@ function promptForValue(message, defaultValue) {
   return enteredValue.trim();
 }
 
-function getDeliverySummary(deliveryHistory) {
-  if (!deliveryHistory || deliveryHistory.length === 0) {
+function getOrderSummary(orderHistory) {
+  if (!orderHistory || orderHistory.length === 0) {
     return {
-      lastDeliveryDate: "",
-      totalDeliveries: 0,
+      lastOrderDate: "",
+      totalOrders: 0,
       totalCases: 0,
       totalSalesAmount: 0
     };
   }
 
-  return deliveryHistory.reduce(
-    (summary, delivery, index) => {
-      const quantityCases = Number(delivery.quantityCases) || 0;
-      const pricePerCase = Number(delivery.pricePerCase) || 0;
+  return orderHistory.reduce(
+    (summary, order, index) => {
+      const lineItems = getNormalizedOrderLineItems(order);
+      const totalCases = lineItems.reduce((sum, line) => sum + line.quantity, 0);
+      const totalAmount = getOrderTotalAmount(order);
 
       return {
-        lastDeliveryDate: index === 0 ? delivery.date : summary.lastDeliveryDate,
-        totalDeliveries: summary.totalDeliveries + 1,
-        totalCases: summary.totalCases + quantityCases,
-        totalSalesAmount: summary.totalSalesAmount + quantityCases * pricePerCase
+        lastOrderDate: index === 0 ? order.date : summary.lastOrderDate,
+        totalOrders: summary.totalOrders + 1,
+        totalCases: summary.totalCases + totalCases,
+        totalSalesAmount: summary.totalSalesAmount + totalAmount
       };
     },
     {
-      lastDeliveryDate: "",
-      totalDeliveries: 0,
+      lastOrderDate: "",
+      totalOrders: 0,
       totalCases: 0,
       totalSalesAmount: 0
     }
   );
+}
+
+function getNormalizedOrderLineItems(order) {
+  if (order.lineItems && order.lineItems.length > 0) {
+    return order.lineItems.map((line) => {
+      const quantity = Number(line.quantity) || 0;
+      const price = Number(line.price) || 0;
+      const isFree = Boolean(line.isFree);
+
+      return {
+        productName: line.productName || "-",
+        quantity,
+        price,
+        isFree,
+        lineTotal: isFree ? 0 : quantity * price
+      };
+    });
+  }
+
+  const legacyQuantity = Number(order.quantityCases) || 0;
+  const legacyPrice = Number(order.pricePerCase) || 0;
+  const legacyIsFree = String(order.freeProduct || "").toLowerCase() === "yes";
+
+  return [
+    {
+      productName: order.productName || "-",
+      quantity: legacyQuantity,
+      price: legacyPrice,
+      isFree: legacyIsFree,
+      lineTotal: legacyIsFree ? 0 : legacyQuantity * legacyPrice
+    }
+  ];
+}
+
+function getOrderTotalAmount(order) {
+  if (typeof order.totalAmount === "number") {
+    return order.totalAmount;
+  }
+
+  return getNormalizedOrderLineItems(order).reduce((sum, line) => {
+    return sum + line.lineTotal;
+  }, 0);
+}
+
+function renderOrderBubbles(orderHistory) {
+  if (!orderHistory || orderHistory.length === 0) {
+    return `<article class="empty-state compact-empty">No orders yet.</article>`;
+  }
+
+  return orderHistory
+    .map((order) => {
+      const lineItems = getNormalizedOrderLineItems(order);
+
+      return `
+        <article class="delivery-history-card">
+          <div class="delivery-history-header">
+            <strong>${formatDate(order.date)}</strong>
+            <span>${formatCurrency(getOrderTotalAmount(order))}</span>
+          </div>
+          <div class="delivery-history-lines">
+            ${lineItems
+              .map((line) => {
+                return `
+                  <div class="delivery-history-line">
+                    <div>
+                      <strong>${escapeHtml(line.productName)}</strong>
+                      <span>${line.isFree ? "Free product" : "Paid line"}</span>
+                    </div>
+                    <div>
+                      <span>Qty: ${line.quantity}</span>
+                      <span>Price: ${formatCurrency(line.price)}</span>
+                      <span>Line total: ${formatCurrency(line.lineTotal)}</span>
+                    </div>
+                  </div>
+                `;
+              })
+              .join("")}
+          </div>
+        </article>
+      `;
+    })
+    .join("");
 }
 
 function formatCurrency(value) {

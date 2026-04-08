@@ -57,11 +57,6 @@
           <input type="hidden" id="client-id" />
 
           <label>
-            City
-            <input type="text" id="city" placeholder="Example: Dallas" required />
-          </label>
-
-          <label>
             Store name
             <input type="text" id="storeName" placeholder="Example: Tequila House" required />
           </label>
@@ -72,8 +67,23 @@
           </label>
 
           <label>
+            City
+            <input type="text" id="city" placeholder="Example: Dallas" required />
+          </label>
+
+          <label>
+            Store phone
+            <input type="tel" id="storePhone" placeholder="Example: 555-123-4567" required />
+          </label>
+
+          <label>
             Owner name
             <input type="text" id="ownerName" placeholder="Example: Maria Lopez" />
+          </label>
+
+          <label>
+            Owner phone
+            <input type="tel" id="ownerPhone" placeholder="Example: 555-333-2222" />
           </label>
 
           <label>
@@ -82,69 +92,13 @@
           </label>
 
           <label>
-            Tasting status
-            <select id="tastingStatus">
-              <option value="">Select one</option>
-              <option value="Yes">Yes</option>
-              <option value="No">No</option>
-              <option value="Pending">Pending</option>
-            </select>
+            Manager phone
+            <input type="tel" id="managerPhone" placeholder="Example: 555-444-1111" />
           </label>
 
           <label>
-            Tasting date
-            <input type="date" id="tastingDate" />
-          </label>
-
-          <label>
-            Purchase status
-            <select id="purchaseStatus">
-              <option value="">Select one</option>
-              <option value="Yes">Yes</option>
-              <option value="No">No</option>
-            </select>
-          </label>
-
-          <label>
-            Products purchased
-            <input type="text" id="productsPurchased" placeholder="Example: Blanco, Reposado" />
-          </label>
-
-          <label>
-            Priority
-            <select id="priority">
-              <option value="">Select one</option>
-              <option value="High">High</option>
-              <option value="Medium">Medium</option>
-              <option value="Low">Low</option>
-            </select>
-          </label>
-
-          <label>
-            Phone
-            <input type="tel" id="phone" placeholder="Example: 555-123-4567" required />
-          </label>
-
-          <label>
-            New note
-            <textarea id="notes" rows="3" placeholder="Write a new note. Older notes will stay saved."></textarea>
-          </label>
-
-          <label>
-            Next visit date
-            <input type="date" id="nextVisitDate" required />
-          </label>
-
-          <label>
-            Client type
-            <select id="clientType" required>
-              <option value="">Select one</option>
-              <option value="Bar">Bar</option>
-              <option value="Restaurant">Restaurant</option>
-              <option value="Liquor store">Liquor store</option>
-              <option value="Supermarket">Supermarket</option>
-              <option value="Other">Other</option>
-            </select>
+            Email
+            <input type="email" id="email" placeholder="Example: hello@store.com" />
           </label>
 
           <div class="actions">
@@ -286,7 +240,7 @@
                 <th>City</th>
                 <th>Total sales</th>
                 <th>Total cases</th>
-                <th>Last delivery</th>
+                <th>Last order</th>
               </tr>
             </thead>
             <tbody id="top-clients-table-body">
@@ -330,35 +284,10 @@
           </label>
         </div>
 
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>City</th>
-                <th>Store</th>
-                <th>Created date</th>
-                <th>Phone</th>
-                <th>Last tasting</th>
-                <th>Last delivery</th>
-                <th>Total deliveries</th>
-                <th>Total cases</th>
-                <th>Total sales</th>
-                <th>Visits</th>
-                <th>Last visit</th>
-                <th>Notes</th>
-                <th>Next visit</th>
-                <th>Type</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="client-table-body">
-              <tr>
-                <td colspan="15" class="empty-state">No clients yet. Add your first client above.</td>
-              </tr>
-            </tbody>
-          </table>
+        <div id="client-cards" class="client-cards">
+          <article class="empty-state">No clients yet. Add your first client above.</article>
         </div>
-      </section>
+       </section>
 
       <section class="card hidden" id="history-card">
         <div class="section-header">
@@ -421,32 +350,37 @@
         </div>
       </section>
 
-      <section class="card hidden" id="delivery-card">
+      <section class="card hidden" id="order-form-card">
         <div class="section-header">
-          <h2 id="delivery-title">Delivery history</h2>
-          <button type="button" id="close-delivery-button" class="secondary">Close</button>
+          <h2 id="order-form-title">Add delivery</h2>
+          <button type="button" id="close-order-form-button" class="secondary">Close</button>
         </div>
 
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Delivery date</th>
-                <th>Product</th>
-                <th>Cases</th>
-                <th>Price/case</th>
-                <th>Free product</th>
-                <th>Free qty</th>
-                <th>Notes</th>
-              </tr>
-            </thead>
-            <tbody id="delivery-table-body">
-              <tr>
-                <td colspan="7" class="empty-state">No delivery history yet.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <form id="order-form" class="delivery-form">
+          <input type="hidden" id="order-client-id" />
+
+          <label>
+            Delivery date
+            <input type="date" id="order-date" required />
+          </label>
+
+          <div class="delivery-lines-header">
+            <h3>Product lines</h3>
+            <button type="button" id="add-order-line-button" class="secondary">Add line</button>
+          </div>
+
+          <div id="order-lines" class="delivery-lines"></div>
+
+          <div class="delivery-total-box">
+            <span>Total amount</span>
+            <strong id="order-total-amount">$0.00</strong>
+          </div>
+
+          <div class="actions">
+            <button type="submit">Save delivery</button>
+            <button type="button" id="cancel-order-form-button" class="secondary">Cancel</button>
+          </div>
+        </form>
       </section>
     </main>
 
