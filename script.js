@@ -1,10 +1,37 @@
-const STORAGE_KEY = "simple-crm-clients";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  getFirestore,
+  onSnapshot,
+  setDoc,
+  writeBatch
+} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCGrJ4yGky-G6y_rMBKvaq3fFXN8U9m0KQ",
+  authDomain: "crm-jannired.firebaseapp.com",
+  projectId: "crm-jannired",
+  storageBucket: "crm-jannired.firebasestorage.app",
+  messagingSenderId: "66237603538",
+  appId: "1:66237603538:web:ca2ca01c1d912b4a92170b",
+  measurementId: "G-0XL7W2J4QJ"
+};
+
+const CLIENTS_COLLECTION = "clients";
+
+let app;
+let db;
+let clientsCollection;
 
 const form = document.getElementById("client-form");
 const formTitle = document.getElementById("form-title");
 const exportButton = document.getElementById("export-button");
 const importButton = document.getElementById("import-button");
 const importFileInput = document.getElementById("import-file-input");
+const syncStatus = document.getElementById("sync-status");
 const clientIdInput = document.getElementById("client-id");
 const cityInput = document.getElementById("city");
 const storeNameInput = document.getElementById("storeName");
@@ -59,7 +86,8 @@ const overdueFollowupsElement = document.getElementById("overdue-followups");
 const activeClientsElement = document.getElementById("active-clients");
 const prospectsElement = document.getElementById("prospects");
 
-let clients = loadClients();
+let clients = [];
+let isFirestoreReady = false;
 
 form.addEventListener("submit", handleSubmit);
 exportButton.addEventListener("click", exportData);
@@ -78,26 +106,80 @@ closeTastingButton.addEventListener("click", closeTasting);
 closeDeliveryButton.addEventListener("click", closeDelivery);
 
 renderClients();
+initializeFirebase();
 
-function loadClients() {
-  const savedClients = localStorage.getItem(STORAGE_KEY);
-
-  if (!savedClients) {
-    return [];
+function initializeFirebase() {
+  try {
+    app = initializeApp(firebaseConfig);
+    console.log("firebase initialized");
+    db = getFirestore(app);
+    clientsCollection = collection(db, CLIENTS_COLLECTION);
+    subscribeToClients();
+  } catch (error) {
+    console.error("Firebase initialization error:", error);
+    setSyncStatus("Firebase could not start.");
+    window.alert("Firebase could not start. Check the console for the exact error.");
   }
-
-  return JSON.parse(savedClients).map((client) => {
-    return {
-      ...client,
-      createdDate: client.createdDate || getTodayString(),
-      lastTastingDate: client.lastTastingDate || client.tastingDate || "",
-      tastingHistory: client.tastingHistory || []
-    };
-  });
 }
 
-function saveClients() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(clients));
+function subscribeToClients() {
+  if (!clientsCollection) {
+    console.error("Firestore collection is not ready.");
+    setSyncStatus("Firestore is not ready.");
+    return;
+  }
+
+  setSyncStatus("Loading clients from Firestore...");
+
+  onSnapshot(
+    clientsCollection,
+    (snapshot) => {
+      isFirestoreReady = true;
+      clients = snapshot.docs
+        .map((item) => normalizeClient({ id: item.id, ...item.data() }))
+        .sort((a, b) => a.storeName.localeCompare(b.storeName));
+
+      setSyncStatus(`Firestore connected. ${clients.length} client${clients.length === 1 ? "" : "s"} loaded.`);
+      renderClients();
+    },
+    (error) => {
+      isFirestoreReady = false;
+      console.error("Firestore connection error:", error);
+      console.error(error);
+      setSyncStatus("Could not load Firestore data.");
+      window.alert("Could not connect to Firestore. Check your Firebase project settings and rules.");
+    }
+  );
+}
+
+function ensureFirestoreReady() {
+  if (db && clientsCollection && isFirestoreReady) {
+    return true;
+  }
+
+  console.error("Firestore is not ready yet.", {
+    appReady: Boolean(app),
+    dbReady: Boolean(db),
+    collectionReady: Boolean(clientsCollection),
+    isFirestoreReady
+  });
+  setSyncStatus("Waiting for Firestore connection...");
+  window.alert("Firestore is still connecting. Please wait a moment and try again.");
+  return false;
+}
+
+async function saveClientToFirestore(client) {
+  if (!ensureFirestoreReady()) {
+    return;
+  }
+
+  try {
+    const clientDoc = doc(db, CLIENTS_COLLECTION, client.id);
+    await setDoc(clientDoc, client);
+  } catch (error) {
+    console.error("Firestore save error:", error);
+    throw error;
+  }
 }
 
 function exportData() {
@@ -122,7 +204,12 @@ function openImportPicker() {
   importFileInput.click();
 }
 
-function importData(event) {
+async function importData(event) {
+  if (!ensureFirestoreReady()) {
+    importFileInput.value = "";
+    return;
+  }
+
   const [file] = event.target.files || [];
 
   if (!file) {
@@ -131,7 +218,7 @@ function importData(event) {
 
   const reader = new FileReader();
 
-  reader.onload = () => {
+  reader.onload = async () => {
     try {
       const parsedData = JSON.parse(reader.result);
       const importedClients = Array.isArray(parsedData) ? parsedData : parsedData.clients;
@@ -141,7 +228,7 @@ function importData(event) {
       }
 
       const confirmed = window.confirm(
-        "Importing data will replace your current clients. Do you want to continue?"
+        "Importing data will replace your current Firestore clients. Do you want to continue?"
       );
 
       if (!confirmed) {
@@ -149,26 +236,33 @@ function importData(event) {
         return;
       }
 
-      clients = importedClients.map((client) => {
-        return {
-          ...client,
-          createdDate: client.createdDate || getTodayString(),
-          lastTastingDate: client.lastTastingDate || client.tastingDate || "",
-          visitHistory: client.visitHistory || [],
-          tastingHistory: client.tastingHistory || [],
-          deliveryHistory: client.deliveryHistory || []
-        };
+      setSyncStatus("Importing data to Firestore...");
+
+      const existingDocs = await getDocs(clientsCollection);
+      const batch = writeBatch(db);
+
+      existingDocs.forEach((item) => {
+        batch.delete(item.ref);
       });
 
-      saveClients();
-      renderClients();
+      importedClients.map(normalizeClient).forEach((client) => {
+        const clientDoc = doc(db, CLIENTS_COLLECTION, client.id);
+        batch.set(clientDoc, client);
+      });
+
+      await batch.commit();
+
       resetForm();
       closeHistory();
       closeDetails();
       closeTasting();
       closeDelivery();
+      setSyncStatus("Import complete. Firestore data updated.");
       window.alert("Data imported successfully.");
     } catch (error) {
+      console.error("Firestore import error:", error);
+      console.error(error);
+      setSyncStatus("Import failed.");
       window.alert("Could not import that file. Please choose a valid CRM backup file.");
     }
 
@@ -178,12 +272,40 @@ function importData(event) {
   reader.readAsText(file);
 }
 
-function handleSubmit(event) {
+function normalizeClient(client) {
+  return {
+    id: client.id || crypto.randomUUID(),
+    city: client.city || "",
+    storeName: client.storeName || "",
+    address: client.address || "",
+    ownerName: client.ownerName || "",
+    managerName: client.managerName || "",
+    tastingStatus: client.tastingStatus || "",
+    tastingDate: client.tastingDate || "",
+    purchaseStatus: client.purchaseStatus || "",
+    productsPurchased: client.productsPurchased || "",
+    priority: client.priority || "",
+    phone: client.phone || "",
+    notes: client.notes || "",
+    nextVisitDate: client.nextVisitDate || "",
+    clientType: client.clientType || "",
+    visitCount: client.visitCount || 1,
+    lastVisitDate: client.lastVisitDate || "",
+    lastOrderDate: client.lastOrderDate || "",
+    createdDate: client.createdDate || getTodayString(),
+    lastTastingDate: client.lastTastingDate || client.tastingDate || "",
+    visitHistory: client.visitHistory || [],
+    tastingHistory: client.tastingHistory || [],
+    deliveryHistory: client.deliveryHistory || []
+  };
+}
+
+async function handleSubmit(event) {
   event.preventDefault();
 
   const existingClient = clients.find((item) => item.id === clientIdInput.value);
 
-  const client = {
+  const client = normalizeClient({
     id: clientIdInput.value || crypto.randomUUID(),
     city: cityInput.value.trim(),
     storeName: storeNameInput.value.trim(),
@@ -203,23 +325,24 @@ function handleSubmit(event) {
     lastVisitDate: existingClient ? existingClient.lastVisitDate || "" : "",
     lastOrderDate: existingClient ? existingClient.lastOrderDate || "" : "",
     createdDate: existingClient ? existingClient.createdDate || getTodayString() : getTodayString(),
-    lastTastingDate: existingClient ? existingClient.lastTastingDate || existingClient.tastingDate || tastingDateInput.value : tastingDateInput.value,
+    lastTastingDate: existingClient
+      ? existingClient.lastTastingDate || existingClient.tastingDate || tastingDateInput.value
+      : tastingDateInput.value,
     visitHistory: existingClient ? existingClient.visitHistory || [] : [],
     tastingHistory: existingClient ? existingClient.tastingHistory || [] : [],
     deliveryHistory: existingClient ? existingClient.deliveryHistory || [] : []
-  };
+  });
 
-  const existingClientIndex = clients.findIndex((item) => item.id === client.id);
-
-  if (existingClientIndex >= 0) {
-    clients[existingClientIndex] = client;
-  } else {
-    clients.push(client);
+  try {
+    setSyncStatus("Saving client to Firestore...");
+    await saveClientToFirestore(client);
+    resetForm();
+    setSyncStatus("Client saved to Firestore.");
+  } catch (error) {
+    console.error(error);
+    setSyncStatus("Could not save client.");
+    window.alert("Could not save this client to Firestore.");
   }
-
-  saveClients();
-  renderClients();
-  resetForm();
 }
 
 function renderClients() {
@@ -688,7 +811,7 @@ function editClient(id) {
   cityInput.focus();
 }
 
-function addVisit(id) {
+async function addVisit(id) {
   const clientIndex = clients.findIndex((item) => item.id === id);
 
   if (clientIndex === -1) {
@@ -725,11 +848,19 @@ function addVisit(id) {
     date: selectedVisitDate,
     note: visitNote
   });
-  saveClients();
-  renderClients();
+
+  try {
+    setSyncStatus("Saving visit to Firestore...");
+    await saveClientToFirestore(clients[clientIndex]);
+    setSyncStatus("Visit saved to Firestore.");
+  } catch (error) {
+    console.error(error);
+    setSyncStatus("Could not save visit.");
+    window.alert("Could not save this visit to Firestore.");
+  }
 }
 
-function addDelivery(id) {
+async function addDelivery(id) {
   const clientIndex = clients.findIndex((item) => item.id === id);
 
   if (clientIndex === -1) {
@@ -792,22 +923,35 @@ function addDelivery(id) {
   clients[clientIndex].purchaseStatus = "Yes";
   clients[clientIndex].productsPurchased = productName || clients[clientIndex].productsPurchased || "";
 
-  saveClients();
-  renderClients();
-  showDeliveries(id);
+  try {
+    setSyncStatus("Saving delivery to Firestore...");
+    await saveClientToFirestore(clients[clientIndex]);
+    setSyncStatus("Delivery saved to Firestore.");
+    showDeliveries(id);
+  } catch (error) {
+    console.error(error);
+    setSyncStatus("Could not save delivery.");
+    window.alert("Could not save this delivery to Firestore.");
+  }
 }
 
-function deleteClient(id) {
+async function deleteClient(id) {
   const confirmed = window.confirm("Delete this client?");
 
   if (!confirmed) {
     return;
   }
 
-  clients = clients.filter((client) => client.id !== id);
-  saveClients();
-  renderClients();
-  resetForm();
+  try {
+    setSyncStatus("Deleting client from Firestore...");
+    await deleteDoc(doc(db, CLIENTS_COLLECTION, id));
+    resetForm();
+    setSyncStatus("Client deleted from Firestore.");
+  } catch (error) {
+    console.error(error);
+    setSyncStatus("Could not delete client.");
+    window.alert("Could not delete this client from Firestore.");
+  }
 }
 
 function resetForm() {
@@ -940,7 +1084,7 @@ function closeDetails() {
   detailsCard.classList.add("hidden");
 }
 
-function addTasting(id) {
+async function addTasting(id) {
   const clientIndex = clients.findIndex((item) => item.id === id);
 
   if (clientIndex === -1) {
@@ -979,9 +1123,16 @@ function addTasting(id) {
   clients[clientIndex].tastingDate = tastingDate;
   clients[clientIndex].tastingStatus = "Yes";
 
-  saveClients();
-  renderClients();
-  showTastings(id);
+  try {
+    setSyncStatus("Saving tasting to Firestore...");
+    await saveClientToFirestore(clients[clientIndex]);
+    setSyncStatus("Tasting saved to Firestore.");
+    showTastings(id);
+  } catch (error) {
+    console.error(error);
+    setSyncStatus("Could not save tasting.");
+    window.alert("Could not save this tasting to Firestore.");
+  }
 }
 
 function showTastings(id) {
@@ -1108,8 +1259,12 @@ function formatCurrency(value) {
   }).format(value || 0);
 }
 
+function setSyncStatus(message) {
+  syncStatus.textContent = message;
+}
+
 function escapeHtml(value) {
-  return value
+  return String(value ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
