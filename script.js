@@ -410,6 +410,7 @@ function renderClients() {
             <button type="button" data-action="set-priority" data-id="${client.id}">Set Priority</button>
             <button type="button" data-action="tasting" data-id="${client.id}">Add Tasting</button>
             <button type="button" data-action="visit" data-id="${client.id}">Add Visit</button>
+            <button type="button" data-action="order" data-id="${client.id}">New Order</button>
             <button type="button" data-action="details" data-id="${client.id}">View Details</button>
             <button type="button" data-action="tastings" data-id="${client.id}">View Tastings</button>
             <button type="button" data-action="history" data-id="${client.id}">View History</button>
