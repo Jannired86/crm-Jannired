@@ -261,6 +261,7 @@ function normalizeClient(client) {
     purchaseStatus: client.purchaseStatus || "",
     productsPurchased: client.productsPurchased || "",
     priority: client.priority || "",
+    status: client.status || "inactive",
     notes: client.notes || "",
     nextVisitDate: client.nextVisitDate || "",
     clientType: client.clientType || "Other",
@@ -296,6 +297,7 @@ async function handleSubmit(event) {
     purchaseStatus: existingClient ? existingClient.purchaseStatus || "" : "",
     productsPurchased: existingClient ? existingClient.productsPurchased || "" : "",
     priority: existingClient ? existingClient.priority || "" : "",
+    status: existingClient ? existingClient.status || "inactive" : "inactive",
     notes: existingClient ? existingClient.notes || "" : "",
     nextVisitDate: existingClient ? existingClient.nextVisitDate || "" : "",
     clientType: existingClient ? existingClient.clientType || "Other" : "Other",
@@ -398,6 +400,7 @@ function renderClients() {
             <div><span>Manager</span><strong>${escapeHtml(client.managerName || "-")}</strong></div>
             <div><span>Manager phone</span><strong>${escapeHtml(client.managerPhone || "-")}</strong></div>
             <div><span>Email</span><strong>${escapeHtml(client.email || "-")}</strong></div>
+            <div><span>Status</span><strong>${formatClientStatus(client.status)}</strong></div>
             <div><span>Next visit</span><strong>${formatDate(client.nextVisitDate)}</strong></div>
             <div><span>Last tasting</span><strong>${formatDate(client.lastTastingDate)}</strong></div>
             <div><span>Last order</span><strong>${formatDate(orderSummary.lastOrderDate)}</strong></div>
@@ -406,6 +409,9 @@ function renderClients() {
           </div>
           <p class="client-entry-notes">${escapeHtml(client.notes || "No notes yet.")}</p>
           <div class="table-actions">
+            <button type="button" data-action="toggle-status" data-id="${client.id}">
+              ${client.status === "active" ? "Set Inactive" : "Set Active"}
+            </button>
             <button type="button" data-action="set-type" data-id="${client.id}">Set Client Type</button>
             <button type="button" data-action="set-priority" data-id="${client.id}">Set Priority</button>
             <button type="button" data-action="tasting" data-id="${client.id}">Add Tasting</button>
@@ -434,6 +440,10 @@ function renderClients() {
         showDetails(id);
       }
 
+      if (action === "toggle-status") {
+        toggleClientStatus(id);
+      }
+
       if (action === "set-type") {
         setClientType(id);
       }
@@ -448,6 +458,10 @@ function renderClients() {
 
       if (action === "tasting") {
         addTasting(id);
+      }
+
+      if (action === "order") {
+        openOrderForm(id);
       }
 
       if (action === "tastings") {
@@ -869,7 +883,7 @@ async function addVisit(id) {
 
 function openOrderForm(id) {
   if (!ORDERS_ENABLED) {
-    window.alert("Add Delivery is temporarily disabled.");
+    window.alert("New Order is coming soon.");
     return;
   }
 
@@ -879,7 +893,7 @@ function openOrderForm(id) {
     return;
   }
 
-  orderFormTitle.textContent = `Add delivery - ${client.storeName}`;
+  orderFormTitle.textContent = `New Order - ${client.storeName}`;
   orderClientIdInput.value = client.id;
   orderDateInput.value = getTodayString();
   orderLines.innerHTML = "";
@@ -981,7 +995,7 @@ function renderOrderTotal() {
 async function handleOrderSubmit(event) {
   if (!ORDERS_ENABLED) {
     event.preventDefault();
-    window.alert("Add Delivery is temporarily disabled.");
+    window.alert("New Order is coming soon.");
     return;
   }
 
@@ -997,7 +1011,7 @@ async function handleOrderSubmit(event) {
   const orderDate = orderDateInput.value;
 
   if (!isValidDateInput(orderDate)) {
-    window.alert("Please enter a valid delivery date.");
+    window.alert("Please enter a valid order date.");
     return;
   }
 
@@ -1022,14 +1036,14 @@ async function handleOrderSubmit(event) {
   clients[clientIndex].productsPurchased = lineItems.map((line) => line.productName).join(", ");
 
   try {
-    setSyncStatus("Saving delivery to Firestore...");
+    setSyncStatus("Saving order to Firestore...");
     await saveClientToFirestore(clients[clientIndex]);
-    setSyncStatus("Delivery saved to Firestore.");
+    setSyncStatus("Order saved to Firestore.");
     closeOrderForm();
   } catch (error) {
     console.error(error);
-    setSyncStatus("Could not save delivery.");
-    window.alert("Could not save this delivery to Firestore.");
+    setSyncStatus("Could not save order.");
+    window.alert("Could not save this order to Firestore.");
   }
 }
 
@@ -1054,6 +1068,32 @@ async function deleteClient(id) {
   }
 }
 
+async function toggleClientStatus(id) {
+  const clientIndex = clients.findIndex((item) => item.id === id);
+
+  if (clientIndex === -1) {
+    return;
+  }
+
+  const previousStatus = clients[clientIndex].status || "inactive";
+  const nextStatus = previousStatus === "active" ? "inactive" : "active";
+
+  clients[clientIndex].status = nextStatus;
+  renderClients();
+
+  try {
+    setSyncStatus("Updating client status in Firestore...");
+    await saveClientToFirestore(clients[clientIndex]);
+    setSyncStatus("Client status updated.");
+  } catch (error) {
+    clients[clientIndex].status = previousStatus;
+    renderClients();
+    console.error(error);
+    setSyncStatus("Could not update client status.");
+    window.alert("Could not update client status in Firestore.");
+  }
+}
+
 function resetForm() {
   form.reset();
   clientIdInput.value = "";
@@ -1072,6 +1112,10 @@ function formatDate(dateString) {
     day: "2-digit",
     year: "numeric"
   });
+}
+
+function formatClientStatus(status) {
+  return status === "active" ? "Active" : "Inactive";
 }
 
 function getTodayString() {
@@ -1492,4 +1536,3 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
 }
-// update
